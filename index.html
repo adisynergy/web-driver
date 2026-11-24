@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PulseTrack • Google Maps Live Viewer</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #070d17;
+      color: #f1f5f9;
+      overflow: hidden;
+    }
+
+    .map-stage {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      background: #0b1320;
+    }
+
+    #gmapsJs,
+    #gmapsEmbed {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: none;
+    }
+
+    #gmapsJs.visible,
+    #gmapsEmbed.visible {
+      display: block;
+    }
+
+    .empty-map-bg {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background:
+        radial-gradient(circle at 50% 45%, rgba(34, 211, 238, 0.12), transparent 55%),
+        #070d17;
+      color: #94a3b8;
+      font-size: 14px;
+      text-align: center;
+      padding: 24px;
+    }
+
+    .empty-map-bg.hidden {
+      display: none;
+    }
+
+    .hud {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      right: 14px;
+      z-index: 1000;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 12px;
+      pointer-events: none;
+    }
+
+    .hud-card {
+      pointer-events: auto;
+      background: rgba(11, 19, 32, 0.92);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(56, 189, 248, 0.32);
+      border-radius: 16px;
+      padding: 13px 15px;
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5);
+      min-width: 280px;
+      max-width: 390px;
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .status-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .engine-badge {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: rgba(34, 211, 238, 0.14);
+      border: 1px solid rgba(34, 211, 238, 0.35);
+      color: #67e8f9;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #94a3b8;
+      flex-shrink: 0;
+    }
+
+    .dot.live {
+      background: #10b981;
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.75);
+      animation: pulse 1.6s infinite;
+    }
+
+    .dot.offline {
+      background: #f59e0b;
+    }
+
+    .dot.error {
+      background: #f43f5e;
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.75); }
+      70% { box-shadow: 0 0 0 11px rgba(16, 185, 129, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    .coords-row {
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .coords {
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 15px;
+      font-weight: 700;
+      color: #22d3ee;
+      cursor: pointer;
+    }
+
+    .coords:hover {
+      text-decoration: underline;
+    }
+
+    .meta {
+      margin-top: 5px;
+      font-size: 12px;
+      color: #cbd5e1;
+      line-height: 1.4;
+    }
+
+    .sub-meta {
+      margin-top: 4px;
+      font-size: 11px;
+      color: #94a3b8;
+      word-break: break-all;
+    }
+
+    .hud-links {
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      pointer-events: auto;
+    }
+
+    .segmented {
+      display: inline-flex;
+      background: rgba(11, 19, 32, 0.92);
+      border: 1px solid rgba(148, 163, 184, 0.32);
+      border-radius: 10px;
+      padding: 3px;
+      gap: 3px;
+    }
+
+    .segmented button {
+      border: none;
+      background: transparent;
+      padding: 6px 10px;
+      font-size: 12px;
+      border-radius: 7px;
+    }
+
+    .segmented button.selected {
+      background: #0891b2;
+      color: #ffffff;
+    }
+
+    button,
+    a.btn-link {
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: rgba(15, 23, 42, 0.92);
+      color: #f1f5f9;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    button:hover,
+    a.btn-link:hover {
+      background: rgba(30, 41, 59, 0.96);
+      border-color: #22d3ee;
+    }
+
+    button.primary {
+      background: #0891b2;
+      border-color: #22d3ee;
+      color: #ffffff;
+    }
+
+    button.primary:hover {
+      background: #0e7490;
+    }
+
+    button.active {
+      border-color: #10b981;
+      color: #6ee7b7;
+    }
+
+    .tracker-picker {
+      margin-top: 8px;
+      display: none;
+    }
+
+    .tracker-picker.visible {
+      display: block;
+    }
+
+    .tracker-picker select {
+      width: 100%;
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid #263854;
+      background: #070d17;
+      color: #f1f5f9;
+      font-size: 12px;
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+    }
+
+    .banner-note {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      background: rgba(11, 19, 32, 0.92);
+      border: 1px solid rgba(251, 191, 36, 0.4);
+      color: #fde68a;
+      border-radius: 999px;
+      padding: 7px 14px;
+      font-size: 12px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      max-width: 92vw;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+    }
+
+    .banner-note.visible {
+      display: flex;
+    }
+
+    .banner-note button {
+      padding: 3px 8px;
+      font-size: 11px;
+      border-radius: 999px;
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(7, 13, 23, 0.8);
+      backdrop-filter: blur(8px);
+    }
+
+    .overlay.hidden {
+      display: none;
+    }
+
+    .modal {
+      width: 100%;
+      max-width: 460px;
+      max-height: 92vh;
+      overflow-y: auto;
+      background: #0e1726;
+      border: 1px solid #263854;
+      border-radius: 18px;
+      padding: 22px;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.65);
+    }
+
+    .modal h1 {
+      font-size: 20px;
+      margin-bottom: 6px;
+    }
+
+    .modal p {
+      font-size: 13px;
+      color: #94a3b8;
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #cbd5e1;
+      margin-bottom: 5px;
+      margin-top: 10px;
+    }
+
+    input,
+    select.modal-select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #263854;
+      background: #070d17;
+      color: #f1f5f9;
+      font-size: 13px;
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+    }
+
+    input:focus,
+    select.modal-select:focus {
+      outline: none;
+      border-color: #22d3ee;
+    }
+
+    .hint {
+      margin-top: 4px;
+      font-size: 11px;
+      color: #94a3b8;
+      line-height: 1.4;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .modal-actions button {
+      flex: 1;
+      justify-content: center;
+      padding: 11px;
+      font-size: 13px;
+    }
+
+    .error-msg {
+      margin-top: 12px;
+      font-size: 12px;
+      color: #fda4af;
+      background: rgba(76, 5, 25, 0.75);
+      border: 1px solid rgba(244, 63, 94, 0.45);
+      border-radius: 8px;
+      padding: 9px 11px;
+      display: none;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <div class="map-stage">
+    <div id="emptyMapBg" class="empty-map-bg">
+      Waiting for live GPS coordinates from Firebase Realtime Database...
+    </div>
+    <div id="gmapsJs"></div>
+    <iframe
+      id="gmapsEmbed"
+      title="Google Maps Live Location"
+      loading="eager"
+      referrerpolicy="no-referrer-when-downgrade"
+      allowfullscreen
+    ></iframe>
+  </div>
+
+  <div class="hud">
+    <div class="hud-card">
+      <div class="status-row">
+        <div class="status-left">
+          <span id="statusDot" class="dot"></span>
+          <span id="statusText">Signed out</span>
+        </div>
+        <span id="engineBadge" class="engine-badge">Google Maps</span>
+      </div>
+
+      <div class="coords-row">
+        <span id="coordsText" class="coords" title="Click to copy coordinates">--.------, ---.------</span>
+      </div>
+      <div id="metaText" class="meta">Sign in with Google to stream live coordinates</div>
+      <div id="subMetaText" class="sub-meta"></div>
+
+      <div id="trackerPickerWrap" class="tracker-picker">
+        <select id="trackerSelect" aria-label="Detected trackers"></select>
+      </div>
+
+      <div class="hud-links">
+        <a
+          id="openExternalGmaps"
+          class="btn-link"
+          href="https://www.google.com/maps"
+          target="_blank"
+          rel="noopener noreferrer"
+          style="display: none;"
+        >
+          Open in Google Maps ↗
+        </a>
+      </div>
+    </div>
+
+    <div class="actions">
+      <div class="segmented" role="group" aria-label="Map style">
+        <button type="button" data-maptype="roadmap" class="selected">Map</button>
+        <button type="button" data-maptype="satellite">Satellite</button>
+        <button type="button" data-maptype="hybrid">Hybrid</button>
+      </div>
+      <button id="followBtn" class="active" type="button">Auto-Follow: ON</button>
+      <button id="recenterBtn" type="button">Center</button>
+      <button id="setupBtn" type="button">Setup</button>
+    </div>
+  </div>
+
+  <div id="bannerNote" class="banner-note">
+    <span id="bannerNoteText"></span>
+    <button id="dismissBannerBtn" type="button">Dismiss</button>
+  </div>
+
+  <div id="setupOverlay" class="overlay">
+    <div class="modal">
+      <h1>PulseTrack • Google Maps</h1>
+      <p>
+        Sign in with the same Google account used on the Android app to map live coordinates from
+        Firebase Realtime Database.
+      </p>
+
+      <label for="apiKeyInput">Firebase Web API Key</label>
+      <input id="apiKeyInput" type="text" placeholder="Paste web apiKey from Firebase Console" />
+
+      <label for="appIdInput">Firebase Web App ID</label>
+      <input id="appIdInput" type="text" placeholder="1:638974724982:web:..." />
+
+      <label for="dbUrlInput">Realtime Database URL</label>
+      <input
+        id="dbUrlInput"
+        type="text"
+        value="https://gen-lang-client-0986790150-default-rtdb.firebaseio.com"
+      />
+
+      <label for="trackerIdInput">Tracker ID</label>
+      <input id="trackerIdInput" type="text" value="android_beacon_01" />
+
+      <label for="mapModeSelect">Google Maps Mode</label>
+      <select id="mapModeSelect" class="modal-select">
+        <option value="auto">Auto (Try Maps JS API, fallback to Google Maps Embed)</option>
+        <option value="embed">Google Maps Embed (Zero API key required)</option>
+        <option value="js">Google Maps JS API (Live pulsing pin + trail + accuracy ring)</option>
+      </select>
+
+      <label for="mapsKeyInput">Google Maps JS API Key (Optional)</label>
+      <input
+        id="mapsKeyInput"
+        type="text"
+        placeholder="Optional — defaults to Firebase API key in Auto mode"
+      />
+      <div class="hint">
+        If Maps JavaScript API is not enabled on your key yet, Auto mode seamlessly displays the official Google Maps Embed pin instead.
+      </div>
+
+      <div id="errorBox" class="error-msg"></div>
+
+      <div class="modal-actions">
+        <button id="signInBtn" class="primary" type="button">Connect &amp; Sign in</button>
+        <button id="closeModalBtn" type="button" style="display: none;">Close</button>
+        <button id="signOutBtn" type="button" style="display: none;">Sign out</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp, getApps, deleteApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+    import {
+      getAuth,
+      GoogleAuthProvider,
+      signInWithPopup,
+      signOut,
+      onAuthStateChanged
+    } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+    import {
+      getDatabase,
+      ref,
+      onValue,
+      off,
+      get,
+      query,
+      limitToLast
+    } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
+
+    const PROJECT_ID = "gen-lang-client-0986790150";
+    const STORAGE_KEY = "pulsetrack_web_viewer_config_v2";
+    const DEFAULT_API_KEY = "AIzaSyBptbpcJBB0MJWZ3k_6Pw99bVxnBwOC0oc";
+    const DEFAULT_APP_ID = "1:638974724982:web:ce0c631926849455c80857";
+    const DEFAULT_DB_URL = "https://gen-lang-client-0986790150-default-rtdb.firebaseio.com";
+
+    const emptyMapBg = document.getElementById("emptyMapBg");
+    const gmapsJsEl = document.getElementById("gmapsJs");
+    const gmapsEmbedEl = document.getElementById("gmapsEmbed");
+    const statusDot = document.getElementById("statusDot");
+    const statusText = document.getElementById("statusText");
+    const engineBadge = document.getElementById("engineBadge");
+    const coordsText = document.getElementById("coordsText");
+    const metaText = document.getElementById("metaText");
+    const subMetaText = document.getElementById("subMetaText");
+    const trackerPickerWrap = document.getElementById("trackerPickerWrap");
+    const trackerSelect = document.getElementById("trackerSelect");
+    const openExternalGmaps = document.getElementById("openExternalGmaps");
+
+    const mapTypeBtns = Array.from(document.querySelectorAll("[data-maptype]"));
+    const followBtn = document.getElementById("followBtn");
+    const recenterBtn = document.getElementById("recenterBtn");
+    const setupBtn = document.getElementById("setupBtn");
+    const bannerNote = document.getElementById("bannerNote");
+    const bannerNoteText = document.getElementById("bannerNoteText");
+    const dismissBannerBtn = document.getElementById("dismissBannerBtn");
+
+    const setupOverlay = document.getElementById("setupOverlay");
+    const apiKeyInput = document.getElementById("apiKeyInput");
+    const appIdInput = document.getElementById("appIdInput");
+    const dbUrlInput = document.getElementById("dbUrlInput");
+    const trackerIdInput = document.getElementById("trackerIdInput");
+    const mapModeSelect = document.getElementById("mapModeSelect");
+    const mapsKeyInput = document.getElementById("mapsKeyInput");
+    const signInBtn = document.getElementById("signInBtn");
+    const closeModalBtn = document.getElementById("closeModalBtn");
+    const signOutBtn = document.getElementById("signOutBtn");
+    const errorBox = document.getElementById("errorBox");
+
+    let activeEngine = "none"; // "js" | "embed" | "none"
+    let mapType = "roadmap"; // "roadmap" | "satellite" | "hybrid"
+    let autoFollow = true;
+    let hasCenteredOnce = false;
+    let latestFix = null;
+    let lastEmbedLatLng = null;
+    let trailCoords = [];
+
+    // Google Maps JS API handles
+    let gMap = null;
+    let gMarker = null;
+    let gAccuracyCircle = null;
+    let gPulseCircle = null;
+    let gPolyline = null;
+    let gInfoWindow = null;
+    let gmapsScriptStatus = "idle"; // "idle" | "loading" | "ready" | "failed"
+    let loadedMapsApiKey = "";
+
+    // Firebase handles
+    let activeAuth = null;
+    let activeDb = null;
+    let activeUser = null;
+    let currentRef = null;
+    let trailRef = null;
+    let ageTimerId = null;
+
+    function loadSavedConfig() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem("pulsetrack_web_viewer_config_v1");
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function saveConfig(cfg) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+    }
+
+    const saved = loadSavedConfig() || {};
+    apiKeyInput.value = saved.apiKey || DEFAULT_API_KEY;
+    appIdInput.value = saved.appId || DEFAULT_APP_ID;
+    dbUrlInput.value = saved.databaseURL || DEFAULT_DB_URL;
+    trackerIdInput.value = saved.trackerId || "android_beacon_01";
+    mapModeSelect.value = saved.mapMode || "auto";
+    mapsKeyInput.value = saved.mapsApiKey || "";
+
+    function showBanner(msg) {
+      bannerNoteText.textContent = msg;
+      bannerNote.classList.add("visible");
+    }
+
+    dismissBannerBtn.addEventListener("click", () => {
+      bannerNote.classList.remove("visible");
+    });
+
+    function showError(message) {
+      if (!message) {
+        errorBox.style.display = "none";
+        errorBox.textContent = "";
+      } else {
+        errorBox.style.display = "block";
+        errorBox.textContent = message;
+      }
+    }
+
+    function updateFollowButton() {
+      followBtn.textContent = autoFollow ? "Auto-Follow: ON" : "Auto-Follow: OFF";
+      followBtn.classList.toggle("active", autoFollow);
+    }
+
+    function distanceMeters(a, b) {
+      if (!a || !b) return Infinity;
+      const R = 6371000;
+      const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+      const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+      const sLat = Math.sin(dLat / 2);
+      const sLng = Math.sin(dLng / 2);
+      const c =
+        sLat * sLat +
+        Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * sLng * sLng;
+      return 2 * R * Math.atan2(Math.sqrt(c), Math.sqrt(1 - c));
+    }
+
+    function formatAge(ms) {
+      if (!ms || Number.isNaN(ms)) return "";
+      const sec = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+      if (sec < 5) return "just now";
+      if (sec < 60) return `${sec}s ago`;
+      const min = Math.floor(sec / 60);
+      if (min < 60) return `${min}m ago`;
+      const hr = Math.floor(min / 60);
+      return `${hr}h ago`;
+    }
+
+    function buildEmbedUrl(lat, lng) {
+      const tParam = mapType === "satellite" ? "k" : mapType === "hybrid" ? "h" : "m";
+      return `https://maps.google.com/maps?q=${encodeURIComponent(`${lat},${lng}`)}&t=${tParam}&z=17&ie=UTF8&iwloc=B&output=embed`;
+    }
+
+    function activateEmbedEngine(reason) {
+      activeEngine = "embed";
+      gmapsJsEl.classList.remove("visible");
+      gmapsEmbedEl.classList.add("visible");
+      engineBadge.textContent = "Google Maps Embed";
+      if (reason) {
+        showBanner(reason);
+      }
+      if (latestFix) {
+        updateEmbedFrame(latestFix.lat, latestFix.lng, true);
+      }
+    }
+
+    function updateEmbedFrame(lat, lng, force = false) {
+      emptyMapBg.classList.add("hidden");
+      const next = { lat, lng };
+      if (!force && lastEmbedLatLng && distanceMeters(lastEmbedLatLng, next) < 15) {
+        return;
+      }
+      lastEmbedLatLng = next;
+      gmapsEmbedEl.src = buildEmbedUrl(lat, lng);
+    }
+
+    function createBeaconIcon(isOnline, bearing) {
+      const fill = isOnline ? "#10b981" : "#f59e0b";
+      const hasBearing = typeof bearing === "number" && bearing > 0;
+      const svg = hasBearing
+        ? `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44">
+             <circle cx="22" cy="22" r="18" fill="${fill}" fill-opacity="0.22" stroke="${fill}" stroke-width="2"/>
+             <g transform="rotate(${bearing} 22 22)">
+               <polygon points="22,6 31,30 22,25 13,30" fill="${fill}" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/>
+             </g>
+           </svg>`
+        : `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
+             <circle cx="20" cy="20" r="17" fill="${fill}" fill-opacity="0.24" stroke="${fill}" stroke-width="2"/>
+             <circle cx="20" cy="20" r="9" fill="${fill}" stroke="#ffffff" stroke-width="3"/>
+           </svg>`;
+
+      return {
+        url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+        scaledSize: new google.maps.Size(hasBearing ? 44 : 40, hasBearing ? 44 : 40),
+        anchor: new google.maps.Point(hasBearing ? 22 : 20, hasBearing ? 22 : 20)
+      };
+    }
+
+    function initGoogleMapsJsInstance() {
+      if (!window.google || !window.google.maps || gmapsScriptStatus === "failed") {
+        return;
+      }
+      if (!gMap) {
+        const startPos = latestFix ? { lat: latestFix.lat, lng: latestFix.lng } : { lat: 20.0, lng: 0.0 };
+        gMap = new google.maps.Map(gmapsJsEl, {
+          center: startPos,
+          zoom: latestFix ? 17 : 3,
+          mapTypeId: mapType,
+          streetViewControl: true,
+          fullscreenControl: false,
+          mapTypeControl: false,
+          zoomControl: true
+        });
+
+        gMap.addListener("dragstart", () => {
+          autoFollow = false;
+          updateFollowButton();
+        });
+
+        gInfoWindow = new google.maps.InfoWindow();
+      }
+
+      activeEngine = "js";
+      gmapsEmbedEl.classList.remove("visible");
+      gmapsJsEl.classList.add("visible");
+      emptyMapBg.classList.add("hidden");
+      engineBadge.textContent = "Google Maps Live";
+
+      if (latestFix) {
+        renderJsFix(latestFix);
+      }
+      if (trailCoords.length > 1) {
+        renderJsTrail();
+      }
+    }
+
+    function ensureGoogleMapsEngine() {
+      const mode = mapModeSelect.value;
+      const key = (mapsKeyInput.value.trim() || apiKeyInput.value.trim());
+
+      if (mode === "embed" || !key) {
+        activateEmbedEngine(mode === "js" && !key ? "No API key provided — using Google Maps Embed." : "");
+        return;
+      }
+
+      if (gmapsScriptStatus === "failed" && loadedMapsApiKey === key) {
+        activateEmbedEngine();
+        return;
+      }
+
+      if (gmapsScriptStatus === "ready" && loadedMapsApiKey === key) {
+        initGoogleMapsJsInstance();
+        return;
+      }
+
+      if (gmapsScriptStatus === "loading") {
+        return;
+      }
+
+      gmapsScriptStatus = "loading";
+      loadedMapsApiKey = key;
+
+      window.gm_authFailure = () => {
+        gmapsScriptStatus = "failed";
+        activateEmbedEngine(
+          mode === "js"
+            ? "Maps JavaScript API is not enabled on this API key in Google Cloud Console — switched to Google Maps Embed."
+            : "Using Google Maps Embed (enable Maps JavaScript API in Google Cloud Console for live pulsing trail)."
+        );
+      };
+
+      window.__onPulseTrackGmapsReady = () => {
+        if (gmapsScriptStatus === "failed") return;
+        gmapsScriptStatus = "ready";
+        initGoogleMapsJsInstance();
+      };
+
+      const script = document.createElement("script");
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&callback=__onPulseTrackGmapsReady`;
+      script.async = true;
+      script.defer = true;
+      script.onerror = () => {
+        gmapsScriptStatus = "failed";
+        activateEmbedEngine("Could not load Maps JS API — switched to Google Maps Embed.");
+      };
+      document.head.appendChild(script);
+    }
+
+    function renderJsTrail() {
+      if (activeEngine !== "js" || !gMap) return;
+      if (!gPolyline) {
+        gPolyline = new google.maps.Polyline({
+          path: trailCoords,
+          geodesic: true,
+          strokeColor: "#22d3ee",
+          strokeOpacity: 0.85,
+          strokeWeight: 4,
+          map: gMap
+        });
+      } else {
+        gPolyline.setPath(trailCoords);
+      }
+    }
+
+    function renderJsFix(fix) {
+      if (activeEngine !== "js" || !gMap) return;
+      const pos = { lat: fix.lat, lng: fix.lng };
+      const icon = createBeaconIcon(fix.isOnline, fix.speedMps > 0.7 ? fix.bearing : 0);
+      const color = fix.isOnline ? "#10b981" : "#f59e0b";
+
+      if (!gMarker) {
+        gMarker = new google.maps.Marker({
+          position: pos,
+          map: gMap,
+          icon,
+          title: `PulseTrack (${fix.lat.toFixed(5)}, ${fix.lng.toFixed(5)})`,
+          zIndex: 999
+        });
+        gMarker.addListener("click", () => {
+          if (!latestFix) return;
+          gInfoWindow.setContent(
+            `<div style="color:#0f172a;font-family:Inter,sans-serif;font-size:12px;line-height:1.45;">
+               <strong>${latestFix.isOnline ? "Live Beacon" : "Last Known Position"}</strong><br/>
+               ${latestFix.lat.toFixed(6)}, ${latestFix.lng.toFixed(6)}<br/>
+               Accuracy: ±${Math.round(latestFix.accuracy)} m • ${(latestFix.speedMps * 3.6).toFixed(1)} km/h
+             </div>`
+          );
+          gInfoWindow.open(gMap, gMarker);
+        });
+      } else {
+        gMarker.setPosition(pos);
+        gMarker.setIcon(icon);
+      }
+
+      if (!gAccuracyCircle) {
+        gAccuracyCircle = new google.maps.Circle({
+          map: gMap,
+          center: pos,
+          radius: Math.max(fix.accuracy, 5),
+          strokeColor: color,
+          strokeOpacity: 0.7,
+          strokeWeight: 1.5,
+          fillColor: color,
+          fillOpacity: 0.14
+        });
+      } else {
+        gAccuracyCircle.setCenter(pos);
+        gAccuracyCircle.setRadius(Math.max(fix.accuracy, 5));
+        gAccuracyCircle.setOptions({ strokeColor: color, fillColor: color });
+      }
+
+      if (!gPulseCircle) {
+        gPulseCircle = new google.maps.Circle({
+          map: gMap,
+          center: pos,
+          radius: Math.max(fix.accuracy * 1.4, 24),
+          strokeColor: "#22d3ee",
+          strokeOpacity: 0.35,
+          strokeWeight: 1,
+          fillOpacity: 0
+        });
+      } else {
+        gPulseCircle.setCenter(pos);
+        gPulseCircle.setRadius(Math.max(fix.accuracy * 1.4, 24));
+      }
+
+      if (!hasCenteredOnce) {
+        hasCenteredOnce = true;
+        gMap.setCenter(pos);
+        gMap.setZoom(17);
+      } else if (autoFollow) {
+        gMap.panTo(pos);
+      }
+    }
+
+    function updateHudFromFix(fix) {
+      const speedKmh = (fix.speedMps * 3.6).toFixed(1);
+      const timeStr = new Date(fix.recordedAtMs).toLocaleTimeString();
+      const ageStr = formatAge(fix.recordedAtMs);
+
+      statusDot.className = fix.isOnline ? "dot live" : "dot offline";
+      statusText.textContent = fix.isOnline ? "Live Location" : "Last Known (Offline)";
+      coordsText.textContent = `${fix.lat.toFixed(6)}, ${fix.lng.toFixed(6)}`;
+      metaText.textContent = `±${Math.round(fix.accuracy)} m • ${speedKmh} km/h • ${timeStr} (${ageStr})`;
+
+      openExternalGmaps.href = `https://www.google.com/maps/search/?api=1&query=${fix.lat},${fix.lng}`;
+      openExternalGmaps.style.display = "inline-flex";
+    }
+
+    function startAgeTicker() {
+      if (ageTimerId) clearInterval(ageTimerId);
+      ageTimerId = setInterval(() => {
+        if (latestFix) {
+          updateHudFromFix(latestFix);
+        }
+      }, 1000);
+    }
+
+    function applyMapType(nextType) {
+      mapType = nextType;
+      for (const btn of mapTypeBtns) {
+        btn.classList.toggle("selected", btn.dataset.maptype === nextType);
+      }
+      if (activeEngine === "js" && gMap) {
+        gMap.setMapTypeId(nextType);
+      } else if (activeEngine === "embed" && latestFix) {
+        updateEmbedFrame(latestFix.lat, latestFix.lng, true);
+      }
+    }
+
+    for (const btn of mapTypeBtns) {
+      btn.addEventListener("click", () => applyMapType(btn.dataset.maptype));
+    }
+
+    followBtn.addEventListener("click", () => {
+      autoFollow = !autoFollow;
+      updateFollowButton();
+      if (autoFollow && latestFix) {
+        if (activeEngine === "js" && gMap) {
+          gMap.panTo({ lat: latestFix.lat, lng: latestFix.lng });
+        } else if (activeEngine === "embed") {
+          updateEmbedFrame(latestFix.lat, latestFix.lng, true);
+        }
+      }
+    });
+
+    recenterBtn.addEventListener("click", () => {
+      if (!latestFix) return;
+      autoFollow = true;
+      updateFollowButton();
+      if (activeEngine === "js" && gMap) {
+        gMap.setCenter({ lat: latestFix.lat, lng: latestFix.lng });
+        if ((gMap.getZoom() || 0) < 17) gMap.setZoom(17);
+      } else if (activeEngine === "embed") {
+        updateEmbedFrame(latestFix.lat, latestFix.lng, true);
+      }
+    });
+
+    coordsText.addEventListener("click", async () => {
+      if (!latestFix) return;
+      const text = `${latestFix.lat.toFixed(6)}, ${latestFix.lng.toFixed(6)}`;
+      try {
+        await navigator.clipboard.writeText(text);
+        const old = coordsText.textContent;
+        coordsText.textContent = "Copied coordinates!";
+        setTimeout(() => {
+          coordsText.textContent = latestFix ? `${latestFix.lat.toFixed(6)}, ${latestFix.lng.toFixed(6)}` : old;
+        }, 1200);
+      } catch {
+        // Ignore clipboard errors in non-secure contexts
+      }
+    });
+
+    setupBtn.addEventListener("click", () => {
+      closeModalBtn.style.display = "inline-flex";
+      setupOverlay.classList.remove("hidden");
+    });
+
+    closeModalBtn.addEventListener("click", () => {
+      setupOverlay.classList.add("hidden");
+    });
+
+    function clearListeners() {
+      if (currentRef) {
+        off(currentRef);
+        currentRef = null;
+      }
+      if (trailRef) {
+        off(trailRef);
+        trailRef = null;
+      }
+    }
+
+    function subscribeToTracker(uid, trackerId) {
+      clearListeners();
+      hasCenteredOnce = false;
+      trailCoords = [];
+      latestFix = null;
+      lastEmbedLatLng = null;
+
+      trackerIdInput.value = trackerId;
+      subMetaText.textContent = `${activeUser?.email || uid} • live_trackers/${uid}/${trackerId}/current`;
+      statusDot.className = "dot";
+      statusText.textContent = "Listening...";
+      metaText.textContent = `Listening for coordinates on "${trackerId}"...`;
+
+      // Listen for live trail history (optional, rendered when Maps JS API is active)
+      trailRef = query(ref(activeDb, `live_trackers/${uid}/${trackerId}/trail`), limitToLast(100));
+      onValue(trailRef, (snap) => {
+        const val = snap.val();
+        if (!val) return;
+        const pts = [];
+        for (const item of Object.values(val)) {
+          const lat = Number(item?.latitude);
+          const lng = Number(item?.longitude);
+          if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            pts.push({ lat, lng });
+          }
+        }
+        trailCoords = pts;
+        renderJsTrail();
+      });
+
+      currentRef = ref(activeDb, `live_trackers/${uid}/${trackerId}/current`);
+      onValue(
+        currentRef,
+        async (snapshot) => {
+          const data = snapshot.val();
+          const lat = Number(data?.latitude);
+          const lng = Number(data?.longitude);
+
+          if (!data || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+            statusDot.className = "dot offline";
+            statusText.textContent = "No coordinates yet";
+            metaText.textContent = `No GPS fix yet at tracker "${trackerId}". Start PulseTrack on your phone.`;
+
+            // Check if coordinates exist under a different trackerId for this same account
+            try {
+              const userRootSnap = await get(ref(activeDb, `live_trackers/${uid}`));
+              const allTrackers = userRootSnap.val();
+              if (allTrackers && typeof allTrackers === "object") {
+                const keys = Object.keys(allTrackers).filter((k) => allTrackers[k]?.current?.latitude != null);
+                if (keys.length > 0) {
+                  trackerSelect.innerHTML = "";
+                  for (const k of keys) {
+                    const opt = document.createElement("option");
+                    opt.value = k;
+                    opt.textContent = `Switch to active tracker: ${k}`;
+                    if (k === trackerId) opt.selected = true;
+                    trackerSelect.appendChild(opt);
+                  }
+                  trackerPickerWrap.classList.add("visible");
+                  if (!keys.includes(trackerId)) {
+                    subscribeToTracker(uid, keys[0]);
+                  }
+                }
+              }
+            } catch {
+              // Ignore auto-discovery error
+            }
+            return;
+          }
+
+          latestFix = {
+            lat,
+            lng,
+            accuracy: Number.isFinite(Number(data.accuracyMeters)) ? Number(data.accuracyMeters) : 15,
+            speedMps: Number.isFinite(Number(data.speedMps)) ? Number(data.speedMps) : 0,
+            bearing: Number.isFinite(Number(data.bearingDegrees)) ? Number(data.bearingDegrees) : 0,
+            isOnline: data.online !== false,
+            recordedAtMs: Number(data.recordedAtMs) || Date.now()
+          };
+
+          updateHudFromFix(latestFix);
+          startAgeTicker();
+
+          if (activeEngine === "none") {
+            ensureGoogleMapsEngine();
+          }
+
+          if (activeEngine === "js" && gMap) {
+            const lastPt = trailCoords[trailCoords.length - 1];
+            if (!lastPt || distanceMeters(lastPt, { lat, lng }) >= 2) {
+              trailCoords.push({ lat, lng });
+              if (trailCoords.length > 250) trailCoords.shift();
+              renderJsTrail();
+            }
+            renderJsFix(latestFix);
+          } else if (activeEngine === "embed") {
+            if (!hasCenteredOnce) {
+              hasCenteredOnce = true;
+              updateEmbedFrame(lat, lng, true);
+            } else if (autoFollow) {
+              updateEmbedFrame(lat, lng, false);
+            }
+          }
+        },
+        (error) => {
+          statusDot.className = "dot error";
+          statusText.textContent = "RTDB Error";
+          metaText.textContent = error.message;
+        }
+      );
+    }
+
+    trackerSelect.addEventListener("change", () => {
+      if (activeUser && trackerSelect.value) {
+        const cfg = loadSavedConfig() || {};
+        cfg.trackerId = trackerSelect.value;
+        saveConfig(cfg);
+        subscribeToTracker(activeUser.uid, trackerSelect.value);
+      }
+    });
+
+    async function initFirebaseFromInputs() {
+      const apiKey = apiKeyInput.value.trim();
+      const appId = appIdInput.value.trim();
+      const databaseURL = dbUrlInput.value.trim().replace(/\/+$/, "");
+      const trackerId = trackerIdInput.value.trim() || "android_beacon_01";
+      const mapMode = mapModeSelect.value;
+      const mapsApiKey = mapsKeyInput.value.trim();
+
+      if (!apiKey || !databaseURL) {
+        throw new Error("Enter your Firebase Web API Key and Realtime Database URL.");
+      }
+
+      const config = {
+        apiKey,
+        authDomain: `${PROJECT_ID}.firebaseapp.com`,
+        databaseURL,
+        projectId: PROJECT_ID,
+        appId: appId || undefined
+      };
+
+      saveConfig({ ...config, trackerId, mapMode, mapsApiKey });
+
+      // Reload cleanly if user changed Google Maps API key or switched back to JS after loading another key
+      if (loadedMapsApiKey && mapsApiKey && loadedMapsApiKey !== mapsApiKey) {
+        window.location.reload();
+        return null;
+      }
+
+      ensureGoogleMapsEngine();
+
+      clearListeners();
+      for (const existing of getApps()) {
+        await deleteApp(existing);
+      }
+
+      const app = initializeApp(config);
+      activeAuth = getAuth(app);
+      activeDb = getDatabase(app);
+
+      onAuthStateChanged(activeAuth, (user) => {
+        activeUser = user;
+        clearListeners();
+
+        if (!user) {
+          signOutBtn.style.display = "none";
+          closeModalBtn.style.display = "none";
+          statusDot.className = "dot";
+          statusText.textContent = "Signed out";
+          metaText.textContent = "Sign in with Google to start live mapping";
+          subMetaText.textContent = "";
+          openExternalGmaps.style.display = "none";
+          setupOverlay.classList.remove("hidden");
+          return;
+        }
+
+        signOutBtn.style.display = "inline-flex";
+        closeModalBtn.style.display = "inline-flex";
+        setupOverlay.classList.add("hidden");
+        subscribeToTracker(user.uid, trackerIdInput.value.trim() || "android_beacon_01");
+      });
+
+      return activeAuth;
+    }
+
+    signInBtn.addEventListener("click", async () => {
+      showError("");
+      try {
+        const auth = await initFirebaseFromInputs();
+        if (auth && !auth.currentUser) {
+          await signInWithPopup(auth, new GoogleAuthProvider());
+        }
+      } catch (err) {
+        if (err && err.code === "auth/unauthorized-domain") {
+          const portPart = window.location.port ? `:${window.location.port}` : "";
+          showError(
+            `This URL (${window.location.hostname}) is not authorized in Firebase Auth. Open http://localhost${portPart}/ instead (localhost is authorized by default).`
+          );
+        } else {
+          showError(err?.message || "Failed to initialize Firebase or sign in.");
+        }
+      }
+    });
+
+    signOutBtn.addEventListener("click", async () => {
+      try {
+        if (activeAuth) {
+          await signOut(activeAuth);
+        }
+      } catch (err) {
+        showError(err?.message || "Failed to sign out.");
+      }
+    });
+
+    // Auto-restore if API key & RTDB URL are configured
+    if (apiKeyInput.value.trim() && dbUrlInput.value.trim()) {
+      initFirebaseFromInputs().catch((err) => showError(err?.message || "Setup error."));
+    }
+  </script>
+</body>
+</html>
